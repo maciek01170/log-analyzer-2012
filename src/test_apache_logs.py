@@ -19,10 +19,11 @@ import apachelogs
 
 from filters import ReFilter, DateFilter
 
+# Log format from apache config
 LOG_FORMAT = "%h %l %u %t \"%r\" %>s %b \"%{Referer}i\" \"%{User-agent}i\" %{Host}i%U%q"
 
 
-# parse logs using apachelogs
+# parse all collected logs, returns the list of apahce log entries
 def parse_logs(log_format):
     log_parser = apachelogs.LogParser(log_format)
     result = []
@@ -38,7 +39,7 @@ def parse_logs(log_format):
 # i_filter = inclusion, log entries will be included into further processing. Priority over e_filter!
 
 filters = {
-    'date': DateFilter(start_date='2021-10-12', end_date='2021-10-15'),
+    # 'date': DateFilter(start_date='2021-10-12', end_date='2021-10-15'),
     'e_uri': ReFilter([r'\.epfl\.ch/(cgi-bin|js|styles|images)/', r'^(search-api|organigramme)']),
     'i_uri': None,  # ReFilter([r'^organigramme']),
     'e_rhost': ReFilter(['(34.89.133.170|128.178.209.56|128.178.209.209|128.178.109.228)']),
@@ -48,42 +49,66 @@ filters = {
 }
 
 
+# return True if the request is excluded from any e_filter and not included in any i_filter in filters
 def excluded(keys):
-    for key in keys:
-        value = request[key]
-        if ReFilter.matches(filters['e_' + key], value) and not ReFilter.matches(filters['i_' + key], value):
+    for cnt_key in keys:
+        value = request[cnt_key]
+        if ReFilter.matches(filters.get('e_' + cnt_key), value) and not ReFilter.matches(filters.get('i_' + cnt_key), value):
             return True
-        return False
+    return False
 
 
-cnt_keys = ['rhost', 'server', 'uri', 'uri_qs']
+# counters titles and keys
+cnt_keys_title = {
+    'rhost': 'Remote host',
+    'server': 'ServerAlias',
+    'uri': 'URI w/o QS',
+    'uri_qs': 'Full URI'
+}
+cnt_keys = list(cnt_keys_title.keys())
+
+# counters : key (from cnt_keys) -> {key: cnt from request}
 cnt = {key: {} for key in cnt_keys}
+
+# crt request
 request = {}
 
 
+# increment cnt for all keys
 def inc(keys):
-    for key in keys:
-        if request.get(key) is not None:
-            cnt[key][request[key]] = cnt[key].get(request[key], 0) + 1
+    for cnt_key in keys:
+        if request.get(cnt_key) is not None:
+            cnt[cnt_key][request[cnt_key]] = cnt[cnt_key].get(request[cnt_key], 0) + 1
 
 
-def counter_iter(key, threshold=1):
-    d = {k: v for k, v in cnt[key].items() if v > threshold}.items() if threshold > 1 else cnt[key].items()
-    return enumerate(dict(sorted(d, key=lambda x: x[1], reverse=True)).items())
+# prints the list of cnts with given cnt_key:
+#   fmt = format using item_key and item_value,
+#   threshold = number of printed entries
+def print_cnt(cnt_key, threshold=1, fmt=lambda item_key, value: f"{item_key:>15}: {value}"):
+    def counter_iter():
+        d = {k: v for k, v in cnt[cnt_key].items() if v > threshold}.items() if threshold > 1 else cnt[cnt_key].items()
+        return enumerate(dict(sorted(d, key=lambda x: x[1], reverse=True)).items())
+
+    print(f"\n* {cnt_keys_title[cnt_key]} details:")
+    for idx, (item_key, value) in counter_iter():
+        print(f"{idx+1:4}. " + fmt(item_key, value))
 
 
 if __name__ == '__main__':
-    nb_entries = 0
+    nb_entries = 0 # number of non excluded entries
     logs = parse_logs(LOG_FORMAT)
     for entry in logs:
-        if not DateFilter.between(filters['date'], entry.request_time):
+        if not DateFilter.between(filters.get('date'), entry.request_time):
             continue
+        server = re.sub(r'^(.*).epfl.ch.*', r'\1.epfl.ch', entry.request_uri)
+        server = re.sub(r'/$', '', server)
         request = {
-            'server': re.sub('^(.*).epfl.ch.*', r'\1.epfl.ch', entry.request_uri),
+            'server': server,
             'rhost': entry.remote_host,
             'query': entry.request_query or ''
         }
-        request['uri'] = request['server'] + entry.request_line.split(' ')[1].split('?')[0]
+        uri = re.sub(r';jsessionid=[A-Z0-9]+', '', entry.request_line.split(' ')[1].split('?')[0])
+        request['uri'] = request['server'] + uri
         if request['query']:
             request['uri_qs'] = request['uri'] + request['query']
 
@@ -93,19 +118,12 @@ if __name__ == '__main__':
         nb_entries += 1
 
     print(f"# entries: {nb_entries}/{len(logs)}")
-    for key in cnt_keys:
-        print(f"# {key}: {len(cnt[key])}")
+    for cnt_key in cnt_keys:
+        print(f"# {cnt_key}: {len(cnt[cnt_key])} ({cnt_keys_title[cnt_key]})")
 
-    print(f"Server details: ")
-    for idx, (server, value) in counter_iter('server'):
-        print(f"{idx+1:4}. {server:>15}: {value}")
-    print(f"Remote host details: ")
-    for idx, (ip, value) in counter_iter('rhost'):
-        print(f"{idx+1:4}. {ip:>15}: {value}")
-    print(f"URI details (> 10)")
-    for idx, (uri, value) in counter_iter('uri'):
-        print(f"{idx+1:4}. https://{uri:<40}: {value}")
-    exit(255)
-    print(f"Full URI details")
-    for idx, (uri, value) in counter_iter('uri_qs'):
-        print(f"{idx+1:4}. https://{uri:<80}: {value}")
+    print_cnt("server")
+    print_cnt("rhost")
+    print_cnt("uri", fmt=lambda item_key, value: f"https://{item_key:<40}: {value}")
+    print_cnt("uri_qs", fmt=lambda item_key, value: f"https://{item_key:<80}: {value}")
+
+    # exit(255)
