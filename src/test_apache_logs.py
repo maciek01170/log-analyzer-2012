@@ -40,12 +40,25 @@ def parse_logs(log_format):
 
 filters = {
     # 'date': DateFilter(start_date='2021-10-12', end_date='2021-10-15'),
-    'e_uri': ReFilter([r'\.epfl\.ch/(cgi-bin|js|styles|images)/', r'^(search-api|organigramme)']),
+    'e_uri': None,  # ReFilter([r'\.epfl\.ch/(cgi-bin|js|styles|images)/', r'^(search-api|organigramme)']),
     'i_uri': None,  # ReFilter([r'^organigramme']),
-    'e_rhost': ReFilter(['(34.89.133.170|128.178.209.56|128.178.209.209|128.178.109.228)']),
+    'e_rhost': ReFilter([
+        r'^128.178.209.209',
+        r'^128.178.209.56',
+        r'^10.180.21.34',
+        r'^128.178.109.228',
+        r'^34.89.133.170',
+        r'^128.178.166.36',
+        r'^128.178.224.25[12]'
+    ]),
     'i_rhost': None,
-    'e_server': ReFilter(['^.*.epfl.ch$']),
-    'i_server': ReFilter(['^search-2012.epfl.ch$'])
+    'e_server': ReFilter([
+        r'^organigramme.epfl.ch',
+        r'^search-api.epfl.ch',
+        r'^search0[12].epfl.ch',
+        r'^128.178.224.19[45]'
+    ]),
+    'i_server': None  # ReFilter(['^search-2012.epfl.ch$'])
 }
 
 
@@ -62,6 +75,7 @@ def excluded(keys):
 cnt_keys_title = {
     'rhost': 'Remote host',
     'server': 'ServerAlias',
+    'server_rhost': 'ServerAlias x Remote host',
     'uri': 'URI w/o QS',
     'uri_qs': 'Full URI'
 }
@@ -101,11 +115,13 @@ if __name__ == '__main__':
         if not DateFilter.between(filters.get('date'), entry.request_time):
             continue
         server = re.sub(r'^(.*).epfl.ch.*', r'\1.epfl.ch', entry.request_uri)
+        server = re.sub(r'^([a-zA-Z0-9_\-]+.epfl.ch){1}?.*$', r'\1', server, re.ASCII)
         server = re.sub(r'/$', '', server)
         request = {
             'server': server,
             'rhost': entry.remote_host,
-            'query': entry.request_query or ''
+            'query': entry.request_query or '',
+            'server_rhost': server + "_" + entry.remote_host,
         }
         uri = re.sub(r';jsessionid=[A-Z0-9]+', '', entry.request_line.split(' ')[1].split('?')[0])
         request['uri'] = request['server'] + uri
@@ -114,7 +130,8 @@ if __name__ == '__main__':
 
         if excluded(['server', 'rhost', 'uri']):
             continue
-        inc(['server', 'rhost', 'uri', 'uri_qs'])
+
+        inc(['server', 'rhost', 'uri', 'uri_qs', 'server_rhost'])
         nb_entries += 1
 
     print(f"# entries: {nb_entries}/{len(logs)}")
@@ -123,6 +140,7 @@ if __name__ == '__main__':
 
     print_cnt("server")
     print_cnt("rhost")
+    print_cnt("server_rhost")
     print_cnt("uri", fmt=lambda item_key, value: f"https://{item_key:<40}: {value}")
     print_cnt("uri_qs", fmt=lambda item_key, value: f"https://{item_key:<80}: {value}")
 

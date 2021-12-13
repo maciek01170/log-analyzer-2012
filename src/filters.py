@@ -21,7 +21,8 @@ class ReFilter:
     def _matches(self, text, operator=OR):
         # l = [re.search(x, text) for x in self.filters]
         # print(f" *** l = {l}")
-        return functools.reduce(operator, [re.search(x, text) for x in self.filters])
+        return any(r is not None for r in [re.search(x, text) for x in self.filters])
+        # return functools.reduce(operator, [re.search(x, text) for x in self.filters])
 
 
 class DateFilter:
