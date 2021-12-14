@@ -42,7 +42,8 @@ filters = {
     # 'date': DateFilter(start_date='2021-10-12', end_date='2021-10-15'),
     'e_uri': None,  # ReFilter([r'\.epfl\.ch/(cgi-bin|js|styles|images)/', r'^(search-api|organigramme)']),
     'i_uri': None,  # ReFilter([r'^organigramme']),
-    'e_rhost': ReFilter([
+    'e_rhost': None,
+    'e_rhost_unused': ReFilter([
         r'^128.178.209.209',
         r'^128.178.209.56',
         r'^10.180.21.34',
@@ -52,7 +53,8 @@ filters = {
         r'^128.178.224.25[12]'
     ]),
     'i_rhost': None,
-    'e_server': ReFilter([
+    'e_server': None,
+    'e_filter_ununsed': ReFilter([
         r'^organigramme.epfl.ch',
         r'^search-api.epfl.ch',
         r'^search0[12].epfl.ch',
